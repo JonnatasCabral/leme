@@ -1,8 +1,8 @@
 import Navbar from "@/components/Navbar";
 
-// Layout do "site" normal: landing, login, dashboard e páginas de auth.
-// As páginas de visualização (/s/[token] e /p/[id]) ficam fora desse grupo
-// de rotas de propósito, para não herdar o Navbar.
+// Layout do "site" normal: landing, login, dashboard, páginas de auth e
+// também as páginas de visualização (/p/[id] e /s/[token]) — todas herdam
+// o Navbar daqui.
 export default function MainLayout({
   children,
 }: {

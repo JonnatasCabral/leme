@@ -153,15 +153,53 @@ STRIPE_PRICE_ID_YEARLY=price_...
 5. Depois de pagar, você volta pro `/dashboard` já como Pro (o webhook `checkout.session.completed` faz essa atualização).
 6. Teste também **Manage billing** no dashboard — abre o Billing Portal do Stripe, onde dá pra cancelar/trocar de plano. Cancele e confirme que `profiles.plan` volta pra `free` (via evento `customer.subscription.deleted` ou `updated`).
 
-## 9. Deploy na Vercel
+## 9. Deploy na Vercel e domínio próprio
 
-1. Suba o código para um repositório no GitHub/GitLab/Bitbucket.
-2. Em [vercel.com](https://vercel.com), clique em **Add New > Project** e importe o repositório.
-3. Em **Environment Variables**, adicione todas as variáveis do `.env.local` (Supabase + Stripe), trocando `NEXT_PUBLIC_SITE_URL` pela URL final do deploy (ex: `https://leme.vercel.app`). Você pode atualizar essa variável depois do primeiro deploy, quando souber a URL definitiva.
-4. Clique em **Deploy**.
-5. Depois do primeiro deploy, volte no Supabase (**Authentication > URL Configuration**) e adicione a URL de produção em **Site URL** e **Redirect URLs** (`https://SEU-DOMINIO.vercel.app/auth/callback`).
-6. Configure o webhook de produção do Stripe apontando pro domínio final (seção 8.4) e atualize `STRIPE_WEBHOOK_SECRET` na Vercel com o signing secret desse endpoint (é diferente do gerado pela Stripe CLI em desenvolvimento).
-7. Redeploy o projeto na Vercel caso tenha alterado alguma variável depois do primeiro deploy.
+O repositório Git local já está inicializado (`git init` + primeiro commit em `master`).
+Falta: subir pro GitHub, importar na Vercel, e depois comprar/conectar o domínio.
+
+### 9.1. Subir o código pro GitHub
+
+1. Crie um repositório vazio em [github.com/new](https://github.com/new) (não marque "Add a README" — o repositório local já tem arquivos).
+2. No terminal, dentro da pasta do projeto:
+
+```bash
+git remote add origin https://github.com/SEU-USUARIO/leme.git
+git push -u origin master
+```
+
+(Se preferir o nome `main` em vez de `master`, rode `git branch -m main` antes do push.)
+
+### 9.2. Importar na Vercel
+
+1. Em [vercel.com/new](https://vercel.com/new), conecte sua conta do GitHub e importe o repositório `leme`.
+2. Em **Environment Variables**, adicione todas as variáveis do `.env.local` (Supabase + Stripe). Deixe `NEXT_PUBLIC_SITE_URL` como `https://leme.vercel.app` por enquanto — ajusta depois que o domínio próprio estiver ativo.
+3. Clique em **Deploy**. Em ~1 minuto o site fica no ar em `https://SEU-PROJETO.vercel.app`.
+4. Volte no Supabase (**Authentication > URL Configuration**) e adicione essa URL em **Site URL** e **Redirect URLs** (`.../auth/callback`).
+
+### 9.3. Comprar o domínio
+
+Duas opções:
+
+- **Comprar direto pela Vercel** (mais simples): no projeto, vá em **Settings > Domains**, digite o nome desejado e, se estiver disponível, a Vercel oferece comprar ali mesmo — o DNS já vem configurado automaticamente, sem passo manual.
+- **Comprar num registrador** (Registro.br, Namecheap, GoDaddy, Cloudflare Registrar, etc.) e depois apontar pra Vercel manualmente (passo 9.4). Costuma ser mais barato pra domínios `.com.br`.
+
+Algumas sugestões de nome pra variar, já que "Leme" é curto — verifique disponibilidade na hora de comprar: `useleme.com`, `leme.app`, `getleme.com`, `leme.sh`, `leme.io`, `meuleme.com`. Domínios `.app` e `.dev` exigem HTTPS (o que a Vercel já garante de graça).
+
+### 9.4. Conectar o domínio na Vercel
+
+1. No projeto, **Settings > Domains > Add**, digite o domínio comprado.
+2. Se comprou fora da Vercel, ela mostra os registros DNS pra criar no painel do seu registrador:
+   - Domínio raiz (`leme.com`): registro **A** apontando pro IP que a Vercel mostrar.
+   - Subdomínio `www`: registro **CNAME** apontando pra `cname.vercel-dns.com`.
+3. Espera propagar (de minutos a algumas horas). A Vercel confirma automaticamente quando detectar o DNS certo, e já emite o certificado HTTPS.
+
+### 9.5. Depois que o domínio estiver ativo
+
+1. Na Vercel, atualize `NEXT_PUBLIC_SITE_URL` pra `https://SEU-DOMINIO.com` e faça um redeploy (Settings > Environment Variables, depois Deployments > ... > Redeploy).
+2. No Supabase (**Authentication > URL Configuration**), troque **Site URL** e adicione o novo **Redirect URL** (`https://SEU-DOMINIO.com/auth/callback`).
+3. No Stripe (seção 8.4), configure o webhook de produção apontando pro domínio final (não o `.vercel.app`) e atualize `STRIPE_WEBHOOK_SECRET` na Vercel com o signing secret desse endpoint.
+4. Redeploy mais uma vez depois de ajustar essas variáveis.
 
 ## Estrutura de pastas
 

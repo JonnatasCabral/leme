@@ -28,11 +28,13 @@ create table if not exists public.html_pages (
 -- não quebre nada.
 alter table public.html_pages add column if not exists expires_at timestamptz;
 alter table public.html_pages add column if not exists anon_id text;
+alter table public.html_pages add column if not exists expires_at_before_pro timestamptz;
 
 comment on table public.html_pages is 'Arquivos HTML enviados pelos usuários (upload).';
 comment on column public.html_pages.file_path is 'Caminho do arquivo no bucket html-files do Supabase Storage.';
 comment on column public.html_pages.expires_at is 'Data de expiração da página (null = nunca expira, típico do plano pro).';
 comment on column public.html_pages.anon_id is 'Identificador do cookie anônimo, usado para contar uploads de quem não tem conta.';
+comment on column public.html_pages.expires_at_before_pro is 'Backup do expires_at que existia antes do usuário virar Pro (ver apply_pro_upgrade/apply_pro_downgrade). Null = página nunca teve expiração suspensa por upgrade, ou já foi restaurada.';
 
 -- ============================================================================
 -- TABELA: profiles
@@ -144,6 +146,57 @@ begin
   update public.html_pages
   set views_count = views_count + 1
   where id = page_id;
+end;
+$$;
+
+-- ============================================================================
+-- FUNÇÕES: apply_pro_upgrade / apply_pro_downgrade
+-- Chamadas pelo webhook do Stripe (app/api/billing/webhook) quando o plano
+-- de um usuário muda. O plano Pro não tem limite de expiração, mas as
+-- páginas que ele já tinha antes de virar Pro tinham um expires_at real —
+-- essas funções suspendem/restauram esse valor em vez de perdê-lo.
+-- ============================================================================
+create or replace function public.apply_pro_upgrade(target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Guarda o expires_at atual em expires_at_before_pro e libera a página
+  -- (null = nunca expira). Só mexe em páginas que ainda não tinham passado
+  -- por isso (expires_at_before_pro is null), pra não sobrescrever o backup
+  -- em re-entregas do webhook ou renovações.
+  update public.html_pages
+  set expires_at_before_pro = expires_at,
+      expires_at = null
+  where user_id = target_user_id
+    and expires_at is not null
+    and expires_at_before_pro is null;
+end;
+$$;
+
+create or replace function public.apply_pro_downgrade(target_user_id uuid, fallback_days integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Restaura o expires_at original de quem já tinha um antes do upgrade.
+  update public.html_pages
+  set expires_at = expires_at_before_pro,
+      expires_at_before_pro = null
+  where user_id = target_user_id
+    and expires_at_before_pro is not null;
+
+  -- Páginas enviadas *durante* o período Pro nunca tiveram um expires_at
+  -- prévio pra restaurar — aplica o prazo padrão do Free a partir de agora.
+  update public.html_pages
+  set expires_at = now() + (fallback_days || ' days')::interval
+  where user_id = target_user_id
+    and expires_at_before_pro is null
+    and expires_at is null;
 end;
 $$;
 

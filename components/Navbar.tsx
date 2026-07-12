@@ -34,17 +34,12 @@ export default async function Navbar() {
               </form>
             </>
           ) : (
-            <>
-              <Link href="/mine" className="text-ink-600 hover:text-ink-900">
-                My files
-              </Link>
-              <Link
-                href="/login"
-                className="rounded-full bg-brand-500 px-4 py-1.5 font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-              >
-                Sign in
-              </Link>
-            </>
+            <Link
+              href="/login"
+              className="rounded-full bg-brand-500 px-4 py-1.5 font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
+            >
+              Sign in
+            </Link>
           )}
         </div>
       </nav>

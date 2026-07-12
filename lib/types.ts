@@ -17,6 +17,7 @@ export type HtmlPage = {
   created_at: string;
   expires_at: string | null;
   anon_id: string | null;
+  expires_at_before_pro: string | null;
 };
 
 export type Plan = "free" | "pro";
@@ -97,6 +98,14 @@ export interface Database {
     Functions: {
       increment_views: {
         Args: { page_id: string };
+        Returns: void;
+      };
+      apply_pro_upgrade: {
+        Args: { target_user_id: string };
+        Returns: void;
+      };
+      apply_pro_downgrade: {
+        Args: { target_user_id: string; fallback_days: number };
         Returns: void;
       };
     };

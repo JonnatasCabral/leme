@@ -1,8 +1,7 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import HtmlViewer from "@/components/HtmlViewer";
 import CopyLink from "@/components/CopyLink";
-import Logo from "@/components/Logo";
+import CollapsibleSidebar from "@/components/CollapsibleSidebar";
 import { formatDate } from "@/lib/utils";
 
 interface ViewerPage {
@@ -13,12 +12,11 @@ interface ViewerPage {
   created_at: string;
 }
 
-// Layout fullscreen usado em /s/[token]: o HTML ocupa todo o espaço à
-// esquerda, e uma sidebar fixa à direita traz título/ações — sem Navbar,
-// sem "cara de site", como se você estivesse acessando o arquivo .html
-// diretamente. O conteúdo da sidebar (comentários etc.) é passado por
-// quem usa o layout, via a prop "sidebar". Como esta página já É o link
-// compartilhado, mostramos ele pronto pra copiar — nunca um botão que
+// Layout usado em /s/[token]: o HTML ocupa todo o espaço à esquerda, e uma
+// sidebar traz título/ações à direita (pode ser escondida via
+// CollapsibleSidebar). O conteúdo da sidebar (comentários etc.) é passado
+// por quem usa o layout, via a prop "sidebar". Como esta página já É o
+// link compartilhado, mostramos ele pronto pra copiar — nunca um botão que
 // gera um link novo.
 export default function PageViewerLayout({
   page,
@@ -32,18 +30,16 @@ export default function PageViewerLayout({
   sidebar: ReactNode;
 }) {
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden sm:flex-row">
+    <div className="flex h-[calc(100vh-4rem)] w-full flex-col overflow-hidden sm:flex-row">
       <div className="min-h-0 flex-1 bg-white">
         <HtmlViewer src={`/api/file/${page.id}`} title={page.title} fill />
       </div>
 
-      <aside className="flex h-[45vh] w-full flex-col border-t border-ink-100 bg-white sm:h-screen sm:w-[380px] sm:shrink-0 sm:border-t-0 sm:border-l">
-        <div className="border-b border-ink-100 px-4 py-3">
-          <Link href="/">
-            <Logo size="sm" />
-          </Link>
-        </div>
-
+      <CollapsibleSidebar
+        reopenLabel="Collaborate"
+        defaultOpen={false}
+        className="flex h-[45vh] w-full flex-col border-t border-ink-100 bg-white sm:h-full sm:w-[380px] sm:shrink-0 sm:border-t-0 sm:border-l"
+      >
         <div className="border-b border-ink-100 px-4 py-3">
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
             Page link
@@ -62,7 +58,7 @@ export default function PageViewerLayout({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{sidebar}</div>
-      </aside>
+      </CollapsibleSidebar>
     </div>
   );
 }

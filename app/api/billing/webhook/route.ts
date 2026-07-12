@@ -2,18 +2,55 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { getStripeClient } from "@/lib/stripe";
+import { getPlanLimits } from "@/lib/plans";
 
 export const runtime = "nodejs";
 
+type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
+
 function isActiveStatus(status: Stripe.Subscription.Status): boolean {
   return status === "active" || status === "trialing";
+}
+
+// Suspende o expires_at das páginas que o usuário já tinha (guardando o
+// valor original em expires_at_before_pro) — ver apply_pro_upgrade no
+// schema.sql. Idempotente: reentregas do webhook não sobrescrevem o backup.
+async function applyProUpgrade(admin: SupabaseAdmin, userId: string) {
+  const { error } = await admin.rpc("apply_pro_upgrade", { target_user_id: userId });
+  if (error) console.error("apply_pro_upgrade failed:", error);
+}
+
+// Restaura o expires_at original de quem tinha (ou aplica o prazo padrão do
+// Free, a partir de agora, pra páginas enviadas durante o período Pro que
+// nunca tiveram uma expiração prévia) — ver apply_pro_downgrade no schema.sql.
+async function applyProDowngrade(admin: SupabaseAdmin, userId: string) {
+  const { retentionDays } = getPlanLimits("free");
+  const { error } = await admin.rpc("apply_pro_downgrade", {
+    target_user_id: userId,
+    fallback_days: retentionDays ?? 30,
+  });
+  if (error) console.error("apply_pro_downgrade failed:", error);
+}
+
+async function getUserIdByCustomerId(
+  admin: SupabaseAdmin,
+  customerId: string
+): Promise<string | null> {
+  const { data } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .single();
+  return data?.id ?? null;
 }
 
 // POST /api/billing/webhook
 // Endpoint que o Stripe chama quando algo muda numa assinatura. Precisa do
 // corpo bruto (não JSON parseado) pra verificar a assinatura HMAC — ver
 // STRIPE_WEBHOOK_SECRET no SETUP.md. Mantém profiles.plan sincronizado com
-// o status real da assinatura no Stripe.
+// o status real da assinatura no Stripe, e também aplica/reverte a
+// suspensão de expiração das páginas existentes (applyProUpgrade/Downgrade)
+// sempre que o plano efetivo muda de/para "pro".
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -63,6 +100,8 @@ export async function POST(request: Request) {
               stripe_subscription_id: subscriptionId ?? null,
             })
             .eq("id", userId);
+
+          await applyProUpgrade(admin, userId);
         }
         break;
       }
@@ -77,11 +116,12 @@ export async function POST(request: Request) {
             ? subscription.customer
             : subscription.customer.id;
         const item = subscription.items.data[0];
+        const active = isActiveStatus(subscription.status);
 
         await admin
           .from("profiles")
           .update({
-            plan: isActiveStatus(subscription.status) ? "pro" : "free",
+            plan: active ? "pro" : "free",
             stripe_subscription_id: subscription.id,
             stripe_price_id: item?.price.id ?? null,
             current_period_end: item
@@ -89,6 +129,12 @@ export async function POST(request: Request) {
               : null,
           })
           .eq("stripe_customer_id", customerId);
+
+        const userId = await getUserIdByCustomerId(admin, customerId);
+        if (userId) {
+          if (active) await applyProUpgrade(admin, userId);
+          else await applyProDowngrade(admin, userId);
+        }
         break;
       }
 
@@ -101,6 +147,8 @@ export async function POST(request: Request) {
             ? subscription.customer
             : subscription.customer.id;
 
+        const userId = await getUserIdByCustomerId(admin, customerId);
+
         await admin
           .from("profiles")
           .update({
@@ -110,6 +158,8 @@ export async function POST(request: Request) {
             current_period_end: null,
           })
           .eq("stripe_customer_id", customerId);
+
+        if (userId) await applyProDowngrade(admin, userId);
         break;
       }
 
