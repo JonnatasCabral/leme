@@ -46,10 +46,12 @@ export async function POST(request: Request) {
       });
       customerId = customer.id;
 
+      // upsert (não update): se a linha em profiles não existir por algum
+      // motivo (ex: apagada manualmente), update() falharia em silêncio —
+      // 0 linhas afetadas, sem erro — e o customerId nunca seria salvo.
       await admin
         .from("profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", user.id);
+        .upsert({ id: user.id, stripe_customer_id: customerId }, { onConflict: "id" });
     }
 
     const session = await stripe.checkout.sessions.create({

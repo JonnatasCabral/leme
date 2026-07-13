@@ -92,14 +92,18 @@ export async function POST(request: Request) {
             : session.subscription?.id;
 
         if (userId && customerId) {
-          await admin
-            .from("profiles")
-            .update({
+          // upsert: se a linha em profiles não existir (ex: apagada
+          // manualmente, ou trigger de signup falhou), update() não criaria
+          // nada — 0 linhas afetadas, sem erro — e o Pro nunca era liberado.
+          await admin.from("profiles").upsert(
+            {
+              id: userId,
               plan: "pro",
               stripe_customer_id: customerId,
               stripe_subscription_id: subscriptionId ?? null,
-            })
-            .eq("id", userId);
+            },
+            { onConflict: "id" }
+          );
 
           await applyProUpgrade(admin, userId);
         }
